@@ -203,6 +203,6 @@ describe User do
     end
   end
 
-  describe "can like other user status update" do
+  describe "can favorite other user status update" do
   end
 end
