@@ -41,9 +41,22 @@ class User
       .map(&:status_updates)
       .reduce([], &:+)
   end
+
+  def favorite(status_update)
+    status_update.add_favorite_by(self)
+  end
 end
 
 class StatusUpdate
+  def add_favorite_by(user)
+    @favorited_by ||= []
+    @favorited_by << user
+  end
+
+  def favorited_by?(user)
+    @favorited_by ||= []
+    @favorited_by.include?(user)
+  end
 end
 
 describe User do
@@ -204,5 +217,35 @@ describe User do
   end
 
   describe "can favorite other user status update" do
+    let(:status_update) { StatusUpdate.new }
+
+    it "favorites status update" do
+      user.favorite(status_update)
+      expect(status_update).to be_favorited_by(user)
+    end
+
+    it "is not considered as favorited by some other user" do
+      user.favorite(status_update)
+      expect(status_update).not_to be_favorited_by(other_user)
+    end
+
+    context "when user did not favorite this status update" do
+      it "is not considered favorited by this user" do
+        expect(status_update).not_to be_favorited_by(user)
+      end
+    end
+
+    context "when status update is favorited by multiple users" do
+      before do
+        user.favorite(status_update)
+        other_user.favorite(status_update)
+      end
+
+      it "is considered favorited by all of such users" do
+        [user, other_user].each do |user|
+          expect(status_update).to be_favorited_by(user)
+        end
+      end
+    end
   end
 end
