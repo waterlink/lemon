@@ -57,6 +57,10 @@ class StatusUpdate
     @favorited_by ||= []
     @favorited_by.include?(user)
   end
+
+  def favorited_by
+    @favorited_by ||= []
+  end
 end
 
 describe User do
@@ -244,6 +248,27 @@ describe User do
       it "is considered favorited by all of such users" do
         [user, other_user].each do |user|
           expect(status_update).to be_favorited_by(user)
+        end
+      end
+    end
+  end
+
+  describe "can see other users who favorited given status update" do
+    context "when nobody have favorited" do
+      it "sees no users" do
+        expect(status_update.favorited_by).to be_empty
+      end
+    end
+
+    context "when some users have favorited" do
+      before do
+        user.favorite(status_update)
+        other_user.favorite(status_update)
+      end
+
+      it "sees all such users" do
+        [user, other_user].each do |user|
+          expect(status_update.favorited_by).to include(user)
         end
       end
     end
