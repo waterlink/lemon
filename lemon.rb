@@ -45,9 +45,24 @@ class User
   def favorite(status_update)
     status_update.add_favorite_by(self)
   end
+
+  def repost(status_update)
+    post(StatusUpdate.repost_of(status_update))
+  end
 end
 
 class StatusUpdate
+  def self.repost_of(status_update)
+    StatusUpdate.new(repost_of: status_update)
+  end
+
+  attr_reader :repost_of
+  protected :repost_of
+
+  def initialize(repost_of: nil)
+    @repost_of = repost_of
+  end
+
   def add_favorite_by(user)
     @favorited_by ||= []
     @favorited_by << user
@@ -60,6 +75,10 @@ class StatusUpdate
 
   def favorited_by
     @favorited_by ||= []
+  end
+
+  def repost_of?(other_status_update)
+    self.repost_of == other_status_update
   end
 end
 
@@ -271,6 +290,23 @@ describe User do
           expect(status_update.favorited_by).to include(user)
         end
       end
+    end
+  end
+
+  describe "can repost a status update from the feed" do
+    before do
+      user.post(status_update)
+      other_user.repost(status_update)
+    end
+
+    subject(:repost) { other_user.status_updates.last }
+
+    it "posts new status update" do
+      expect(repost).to be_repost_of(status_update)
+    end
+
+    it "is not the same status update" do
+      expect(repost).not_to eq(status_update)
     end
   end
 end
