@@ -19,6 +19,7 @@ class User
   def post(status_update)
     @status_updates ||= []
     @status_updates << status_update
+    status_update.owner = self
   end
 
   def status_updates
@@ -49,12 +50,18 @@ class User
   def repost(status_update)
     post(StatusUpdate.repost_of(status_update))
   end
+
+  def notifications
+    @notifications ||= []
+  end
 end
 
 class StatusUpdate
   def self.repost_of(status_update)
     StatusUpdate.new(repost_of: status_update)
   end
+
+  attr_accessor :owner
 
   attr_reader :repost_of
   protected :repost_of
@@ -66,6 +73,10 @@ class StatusUpdate
   def add_favorite_by(user)
     @favorited_by ||= []
     @favorited_by << user
+    @owner.notifications << FavoritedNotification.new(
+      favoriter: user,
+      status_update: self,
+    )
   end
 
   def favorited_by?(user)
@@ -82,6 +93,12 @@ class StatusUpdate
   end
 end
 
+class FavoritedNotification < Struct.new(:favoriter, :status_update)
+  def initialize(favoriter: nil, status_update: nil)
+    super(favoriter, status_update)
+  end
+end
+
 describe User do
   let(:email) { "john@example.org" }
 
@@ -95,6 +112,13 @@ describe User do
   let(:other_user) do
     User.new(
       email: "sarah@example.org",
+      password: "welcome",
+    )
+  end
+
+  let(:another_user) do
+    User.new(
+      email: "jonatan@example.org",
       password: "welcome",
     )
   end
@@ -214,13 +238,6 @@ describe User do
     end
 
     context "when following multiple users" do
-      let(:another_user) do
-        User.new(
-          email: "jonatan@example.org",
-          password: "welcome",
-        )
-      end
-
       let(:another_status_update) { StatusUpdate.new }
 
       before do
@@ -241,6 +258,10 @@ describe User do
 
   describe "can favorite other user status update" do
     let(:status_update) { StatusUpdate.new }
+
+    before do
+      other_user.post(status_update)
+    end
 
     it "favorites status update" do
       user.favorite(status_update)
@@ -273,6 +294,10 @@ describe User do
   end
 
   describe "can see other users who favorited given status update" do
+    before do
+      another_user.post(status_update)
+    end
+
     context "when nobody have favorited" do
       it "sees no users" do
         expect(status_update.favorited_by).to be_empty
@@ -307,6 +332,64 @@ describe User do
 
     it "is not the same status update" do
       expect(repost).not_to eq(status_update)
+    end
+  end
+
+  describe "is subscribed to favorites of own status updates" do
+    context "when status update is not own" do
+      before do
+        other_user.post(status_update)
+        another_user.favorite(status_update)
+      end
+
+      it "does not appear in the notifications" do
+        expect(user.notifications).to be_empty
+      end
+    end
+
+    context "when status update is own" do
+      before do
+        user.post(status_update)
+      end
+
+      context "when status update is not favorited" do
+        it "does not change notifications" do
+          expect(user.notifications).to be_empty
+        end
+      end
+
+      context "when status update is favorited" do
+        before do
+          other_user.favorite(status_update)
+        end
+
+        it "creates an event in user's notifications" do
+          expect(user.notifications).to include(FavoritedNotification.new(
+            favoriter: other_user,
+            status_update: status_update,
+          ))
+        end
+
+        context "when favorited by more users" do
+          before do
+            another_user.favorite(status_update)
+          end
+
+          it "receives another notification" do
+            expect(user.notifications).to include(FavoritedNotification.new(
+              favoriter: another_user,
+              status_update: status_update,
+            ))
+          end
+
+          it "still preserves old notifications" do
+            expect(user.notifications).to include(FavoritedNotification.new(
+              favoriter: other_user,
+              status_update: status_update,
+            ))
+          end
+        end
+      end
     end
   end
 end
