@@ -49,6 +49,10 @@ class User
 
   def repost(status_update)
     post(StatusUpdate.repost_of(status_update))
+    status_update.owner.notifications << RepostedNotification.new(
+      reposter: self,
+      status_update: status_update,
+    )
   end
 
   def notifications
@@ -96,6 +100,12 @@ end
 class FavoritedNotification < Struct.new(:favoriter, :status_update)
   def initialize(favoriter: nil, status_update: nil)
     super(favoriter, status_update)
+  end
+end
+
+class RepostedNotification < Struct.new(:reposter, :status_update)
+  def initialize(reposter: nil, status_update: nil)
+    super(reposter, status_update)
   end
 end
 
@@ -385,6 +395,58 @@ describe User do
           it "still preserves old notifications" do
             expect(user.notifications).to include(FavoritedNotification.new(
               favoriter: other_user,
+              status_update: status_update,
+            ))
+          end
+        end
+      end
+    end
+  end
+
+  describe "is subscribed to reposts of own status updates" do
+    context "when status update is not own" do
+      before do
+        other_user.post(status_update)
+        another_user.repost(status_update)
+      end
+
+      it "does not send any notification to this user" do
+        expect(user.notifications).to be_empty
+      end
+    end
+
+    context "when status update is own" do
+      before do
+        user.post(status_update)
+      end
+
+      context "when reposted by one user" do
+        before do
+          other_user.repost(status_update)
+        end
+
+        it "sends repost notification to this user" do
+          expect(user.notifications).to include(RepostedNotification.new(
+            reposter: other_user,
+            status_update: status_update,
+          ))
+        end
+
+        context "when reposted by more users" do
+          before do
+            another_user.repost(status_update)
+          end
+
+          it "sends repost notification to this user" do
+            expect(user.notifications).to include(RepostedNotification.new(
+              reposter: another_user,
+              status_update: status_update,
+            ))
+          end
+
+          it "preserves previous notifications for this user" do
+            expect(user.notifications).to include(RepostedNotification.new(
+              reposter: other_user,
               status_update: status_update,
             ))
           end
