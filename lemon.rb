@@ -29,6 +29,10 @@ class User
   def follow(other_user)
     @following ||= []
     @following << other_user
+    other_user.notifications << FollowedNotification.new(
+      follower: self,
+      user: other_user,
+    )
   end
 
   def following?(other_user)
@@ -106,6 +110,12 @@ end
 class RepostedNotification < Struct.new(:reposter, :status_update)
   def initialize(reposter: nil, status_update: nil)
     super(reposter, status_update)
+  end
+end
+
+class FollowedNotification < Struct.new(:follower, :user)
+  def initialize(follower: nil, user: nil)
+    super(follower, user)
   end
 end
 
@@ -450,6 +460,51 @@ describe User do
               status_update: status_update,
             ))
           end
+        end
+      end
+    end
+  end
+
+  describe "is subscribed to followed notifications" do
+    context "when follow does not involve this user" do
+      before do
+        other_user.follow(another_user)
+      end
+
+      it "does not send notification to this user" do
+        expect(user.notifications).to be_empty
+      end
+    end
+
+    context "when followed by other user" do
+      before do
+        other_user.follow(user)
+      end
+
+      it "sends followed notification to this user" do
+        expect(user.notifications).to include(FollowedNotification.new(
+          follower: other_user,
+          user: user,
+        ))
+      end
+
+      context "when followed by many users" do
+        before do
+          another_user.follow(user)
+        end
+
+        it "sends followed notification to this user" do
+          expect(user.notifications).to include(FollowedNotification.new(
+            follower: another_user,
+            user: user,
+          ))
+        end
+
+        it "preserves previous notifications for this user" do
+          expect(user.notifications).to include(FollowedNotification.new(
+            follower: other_user,
+            user: user,
+          ))
         end
       end
     end
