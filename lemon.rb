@@ -42,6 +42,8 @@ class User
   end
 
   def follow(other_user)
+    return if other_user.blocking?(self)
+
     @following ||= []
     @following << other_user
     other_user.notifications << FollowedNotification.new(
@@ -86,6 +88,17 @@ class User
   def unfollow(other_user)
     @following ||= []
     @following.delete(other_user)
+  end
+
+  def block(other_user)
+    @blocking ||= []
+    @blocking << other_user
+    other_user.unfollow(self)
+  end
+
+  def blocking?(other_user)
+    @blocking ||= []
+    @blocking.include?(other_user)
   end
 end
 
@@ -835,6 +848,64 @@ describe User do
 
       it "still stops following" do
         user.unfollow(other_user)
+        expect(user).not_to be_following(other_user)
+      end
+    end
+  end
+
+  describe "can block other user" do
+    it "is not blocking unless blocked" do
+      expect(user).not_to be_blocking(other_user)
+    end
+
+    it "blocks other user" do
+      user.block(other_user)
+      expect(user).to be_blocking(other_user)
+    end
+
+    it "does not block any other user" do
+      user.block(other_user)
+      expect(user).not_to be_blocking(another_user)
+    end
+
+    it "is possible to block multiple users" do
+      user.block(other_user)
+      user.block(another_user)
+      [other_user, another_user].each do |blocked_user|
+        expect(user).to be_blocking(blocked_user)
+      end
+    end
+  end
+
+  describe "can not follow when blocked" do
+    context "when was not following before block" do
+      before do
+        other_user.block(user)
+      end
+
+      it "disallows following that user" do
+        user.follow(other_user)
+        expect(user).not_to be_following(other_user)
+      end
+
+      it "does not affect ability to follow other users" do
+        user.follow(another_user)
+        expect(user).to be_following(another_user)
+      end
+
+      it "does not affect ability of other users to follow that user" do
+        another_user.follow(other_user)
+        expect(another_user).to be_following(other_user)
+      end
+    end
+
+    context "when was following before block" do
+      before do
+        user.follow(other_user)
+        other_user.block(user)
+      end
+
+      it "unfollows that user" do
         expect(user).not_to be_following(other_user)
       end
     end
