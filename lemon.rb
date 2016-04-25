@@ -122,27 +122,69 @@ class StatusUpdate
   end
 end
 
-class FavoritedNotification < Struct.new(:favoriter, :status_update)
+class FavoritedNotification
+  attr_reader :favoriter, :status_update
+  protected :favoriter, :status_update
+
   def initialize(favoriter: nil, status_update: nil)
-    super(favoriter, status_update)
+    @favoriter = favoriter
+    @status_update = status_update
+  end
+
+  def ==(other)
+    return false unless other.is_a?(FavoritedNotification)
+    self.favoriter == other.favoriter &&
+      self.status_update == other.status_update
   end
 end
 
-class RepostedNotification < Struct.new(:reposter, :status_update)
+class RepostedNotification
+  attr_reader :reposter, :status_update
+  protected :reposter, :status_update
+
   def initialize(reposter: nil, status_update: nil)
-    super(reposter, status_update)
+    @reposter = reposter
+    @status_update = status_update
+  end
+
+  def ==(other)
+    return false unless other.is_a?(RepostedNotification)
+    self.reposter == other.reposter &&
+      self.status_update == other.status_update
   end
 end
 
-class FollowedNotification < Struct.new(:follower, :user)
+class FollowedNotification
+  attr_reader :follower, :user
+  protected :follower, :user
+
   def initialize(follower: nil, user: nil)
-    super(follower, user)
+    @follower = follower
+    @user = user
+  end
+
+  def ==(other)
+    return false unless other.is_a?(FollowedNotification)
+    self.follower == other.follower &&
+      self.user == other.user
   end
 end
 
-class RepliedNotification < Struct.new(:sender, :status_update, :reply)
+class RepliedNotification
+  attr_reader :sender, :status_update, :reply
+  protected :sender, :status_update, :reply
+
   def initialize(sender: nil, status_update: nil, reply: nil)
-    super(sender, status_update, reply)
+    @sender = sender
+    @status_update = status_update
+    @reply = reply
+  end
+
+  def ==(other)
+    return false unless other.is_a?(RepliedNotification)
+    self.sender == other.sender &&
+      self.status_update == other.status_update &&
+      self.reply == other.reply
   end
 end
 
