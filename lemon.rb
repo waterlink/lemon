@@ -62,6 +62,11 @@ class User
   def notifications
     @notifications ||= []
   end
+
+  def reply(status_update, reply)
+    post(reply)
+    reply.reply_for = status_update
+  end
 end
 
 class StatusUpdate
@@ -69,7 +74,7 @@ class StatusUpdate
     StatusUpdate.new(repost_of: status_update)
   end
 
-  attr_accessor :owner
+  attr_accessor :owner, :reply_for
 
   attr_reader :repost_of
   protected :repost_of
@@ -97,7 +102,11 @@ class StatusUpdate
   end
 
   def repost_of?(other_status_update)
-    self.repost_of == other_status_update
+    repost_of == other_status_update
+  end
+
+  def reply_for?(other_status_update)
+    reply_for == other_status_update
   end
 end
 
@@ -144,6 +153,7 @@ describe User do
   end
 
   let(:status_update) { StatusUpdate.new }
+  let(:another_status_update) { StatusUpdate.new }
 
   describe "can sign in" do
     it "is signed in" do
@@ -258,8 +268,6 @@ describe User do
     end
 
     context "when following multiple users" do
-      let(:another_status_update) { StatusUpdate.new }
-
       before do
         user.follow(other_user)
         user.follow(another_user)
@@ -507,6 +515,29 @@ describe User do
           ))
         end
       end
+    end
+  end
+
+  describe "can reply to status update" do
+    before do
+      other_user.post(status_update)
+    end
+
+    subject(:reply) { StatusUpdate.new }
+
+    it "posts a reply" do
+      user.reply(status_update, reply)
+      expect(user.status_updates).to include(reply)
+    end
+
+    it "posts a reply to that status update" do
+      user.reply(status_update, reply)
+      expect(reply).to be_reply_for(status_update)
+    end
+
+    it "posts a reply to that and only to that status update" do
+      user.reply(status_update, reply)
+      expect(reply).not_to be_reply_for(another_status_update)
     end
   end
 end
