@@ -17,10 +17,13 @@ class User
   def initialize(email: nil, password: nil)
     @password = password
     @signed_in = false
+    Analytics.tag({name: "created_user"})
   end
 
   def sign_in_via_password(password)
-    @signed_in = @password == password
+    @signed_in = (@password == password).tap do |success|
+      Analytics.tag({name: "password_sign_in", success: success})
+    end
   end
 
   def signed_in?
@@ -29,12 +32,14 @@ class User
 
   def sign_out
     @signed_in = false
+    Analytics.tag({name: "sign_out"})
   end
 
   def post(status_update)
     @status_updates ||= []
     @status_updates << status_update
     status_update.owner = self
+    Analytics.tag({name: "post_status_update", repost: false, reply: false})
   end
 
   def status_updates
@@ -42,7 +47,10 @@ class User
   end
 
   def follow(other_user)
-    return if other_user.blocking?(self)
+    if other_user.blocking?(self)
+      Analytics.tag({name: "follow_user_attempt_while_blocked"})
+      return
+    end
 
     @following ||= []
     @following << other_user
@@ -50,6 +58,8 @@ class User
       follower: self,
       user: other_user,
     ) unless other_user.has_notifications_disabled? || other_user.has_followed_notification_disabled?
+
+    Analytics.tag({name: "follow_user"})
   end
 
   def following?(other_user)
@@ -61,11 +71,14 @@ class User
     @following ||= []
     @following
       .map(&:status_updates)
-      .reduce([], &:+)
+      .reduce([], &:+).tap do |feed|
+        Analytics.tag({name: "fetch_feed", count: feed.count})
+      end
   end
 
   def favorite(status_update)
     status_update.add_favorite_by(self)
+    Analytics.tag({name: "favorite_status_update"})
   end
 
   def repost(status_update)
@@ -74,31 +87,82 @@ class User
       reposter: self,
       status_update: status_update,
     ) unless status_update.owner.has_notifications_disabled? || status_update.owner.has_reposted_notification_disabled?
+    Analytics.tag({name: "post_status_update", repost: true, reply: false})
   end
 
   def notifications
-    @notifications ||= []
+    (@notifications ||= []).tap do |notifications|
+      Analytics.tag({name: "fetch_notifications", count: notifications.count})
+    end
   end
 
   def reply(status_update, reply)
     post(reply)
     reply.reply_for = status_update
+    Analytics.tag({name: "post_status_update", repost: false, reply: true})
   end
 
   def unfollow(other_user)
     @following ||= []
     @following.delete(other_user)
+    Analytics.tag({name: "unfollow_user"})
   end
 
   def block(other_user)
     @blocking ||= []
     @blocking << other_user
     other_user.unfollow(self)
+    Analytics.tag({name: "block_user"})
   end
 
   def blocking?(other_user)
     @blocking ||= []
     @blocking.include?(other_user)
+  end
+
+  def has_notifications_disabled=(value)
+    @has_notifications_disabled = value
+    if value
+      Analytics.tag({name: "disabled_notifications"})
+    else
+      Analytics.tag({name: "enabled_notifications"})
+    end
+  end
+
+  def has_replied_notification_disabled=(value)
+    @has_replied_notification_disabled = value
+    if value
+      Analytics.tag({name: "disabled_replied_notification"})
+    else
+      Analytics.tag({name: "enabled_replied_notification"})
+    end
+  end
+
+  def has_followed_notification_disabled=(value)
+    @has_followed_notification_disabled = value
+    if value
+      Analytics.tag({name: "disabled_followed_notification"})
+    else
+      Analytics.tag({name: "enabled_followed_notification"})
+    end
+  end
+
+  def has_reposted_notification_disabled=(value)
+    @has_reposted_notification_disabled = value
+    if value
+      Analytics.tag({name: "disabled_reposted_notification"})
+    else
+      Analytics.tag({name: "enabled_reposted_notification"})
+    end
+  end
+
+  def has_favorited_notification_disabled=(value)
+    @has_favorited_notification_disabled = value
+    if value
+      Analytics.tag({name: "disabled_favorited_notification"})
+    else
+      Analytics.tag({name: "enabled_favorited_notification"})
+    end
   end
 end
 
@@ -215,6 +279,14 @@ class RepliedNotification
     self.sender == other.sender &&
       self.status_update == other.status_update &&
       self.reply == other.reply
+  end
+end
+
+module Analytics
+  extend self
+
+  def tag(event)
+    puts "fake analytics: tagged #{event.inspect}"
   end
 end
 
