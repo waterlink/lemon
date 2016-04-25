@@ -2,6 +2,18 @@ class User
   attr_accessor :has_notifications_disabled
   alias_method :has_notifications_disabled?, :has_notifications_disabled
 
+  attr_accessor :has_favorited_notification_disabled
+  alias_method :has_favorited_notification_disabled?, :has_favorited_notification_disabled
+
+  attr_accessor :has_reposted_notification_disabled
+  alias_method :has_reposted_notification_disabled?, :has_reposted_notification_disabled
+
+  attr_accessor :has_followed_notification_disabled
+  alias_method :has_followed_notification_disabled?, :has_followed_notification_disabled
+
+  attr_accessor :has_replied_notification_disabled
+  alias_method :has_replied_notification_disabled?, :has_replied_notification_disabled
+
   def initialize(email: nil, password: nil)
     @password = password
     @signed_in = false
@@ -35,7 +47,7 @@ class User
     other_user.notifications << FollowedNotification.new(
       follower: self,
       user: other_user,
-    ) unless other_user.has_notifications_disabled?
+    ) unless other_user.has_notifications_disabled? || other_user.has_followed_notification_disabled?
   end
 
   def following?(other_user)
@@ -59,7 +71,7 @@ class User
     status_update.owner.notifications << RepostedNotification.new(
       reposter: self,
       status_update: status_update,
-    ) unless status_update.owner.has_notifications_disabled?
+    ) unless status_update.owner.has_notifications_disabled? || status_update.owner.has_reposted_notification_disabled?
   end
 
   def notifications
@@ -92,7 +104,7 @@ class StatusUpdate
     @owner.notifications << FavoritedNotification.new(
       favoriter: user,
       status_update: self,
-    ) unless owner.has_notifications_disabled?
+    ) unless owner.has_notifications_disabled? || owner.has_favorited_notification_disabled?
   end
 
   def favorited_by?(user)
@@ -114,7 +126,7 @@ class StatusUpdate
       sender: @owner,
       status_update: other_status_update,
       reply: self,
-    ) unless other_status_update.owner.has_notifications_disabled?
+    ) unless other_status_update.owner.has_notifications_disabled? || other_status_update.owner.has_replied_notification_disabled?
   end
 
   def reply_for?(other_status_update)
@@ -675,6 +687,122 @@ describe User do
     it "does not send followed notification" do
       other_user.follow(user)
       expect(user.notifications).to be_empty
+    end
+
+    it "does not send replied notification" do
+      user.post(status_update)
+      other_user.reply(status_update, StatusUpdate.new)
+      expect(user.notifications).to be_empty
+    end
+  end
+
+  describe "can disable favorited notification" do
+    before do
+      user.has_favorited_notification_disabled = true
+    end
+
+    it "does not send favorited notification" do
+      user.post(status_update)
+      other_user.favorite(status_update)
+      expect(user.notifications).to be_empty
+    end
+
+    it "sends reposted notification" do
+      user.post(status_update)
+      other_user.repost(status_update)
+      expect(user.notifications).not_to be_empty
+    end
+
+    it "sends followed notification" do
+      other_user.follow(user)
+      expect(user.notifications).not_to be_empty
+    end
+
+    it "sends replied notification" do
+      user.post(status_update)
+      other_user.reply(status_update, StatusUpdate.new)
+      expect(user.notifications).not_to be_empty
+    end
+  end
+
+  describe "can disable reposted notification" do
+    before do
+      user.has_reposted_notification_disabled = true
+    end
+
+    it "sends favorited notification" do
+      user.post(status_update)
+      other_user.favorite(status_update)
+      expect(user.notifications).not_to be_empty
+    end
+
+    it "does not send reposted notification" do
+      user.post(status_update)
+      other_user.repost(status_update)
+      expect(user.notifications).to be_empty
+    end
+
+    it "sends followed notification" do
+      other_user.follow(user)
+      expect(user.notifications).not_to be_empty
+    end
+
+    it "sends replied notification" do
+      user.post(status_update)
+      other_user.reply(status_update, StatusUpdate.new)
+      expect(user.notifications).not_to be_empty
+    end
+  end
+
+  describe "can disable followed notification" do
+    before do
+      user.has_followed_notification_disabled = true
+    end
+
+    it "sends favorited notification" do
+      user.post(status_update)
+      other_user.favorite(status_update)
+      expect(user.notifications).not_to be_empty
+    end
+
+    it "sends reposted notification" do
+      user.post(status_update)
+      other_user.repost(status_update)
+      expect(user.notifications).not_to be_empty
+    end
+
+    it "does not send followed notification" do
+      other_user.follow(user)
+      expect(user.notifications).to be_empty
+    end
+
+    it "sends replied notification" do
+      user.post(status_update)
+      other_user.reply(status_update, StatusUpdate.new)
+      expect(user.notifications).not_to be_empty
+    end
+  end
+
+  describe "can disable replied notification" do
+    before do
+      user.has_replied_notification_disabled = true
+    end
+
+    it "sends favorited notification" do
+      user.post(status_update)
+      other_user.favorite(status_update)
+      expect(user.notifications).not_to be_empty
+    end
+
+    it "sends reposted notification" do
+      user.post(status_update)
+      other_user.repost(status_update)
+      expect(user.notifications).not_to be_empty
+    end
+
+    it "sends followed notification" do
+      other_user.follow(user)
+      expect(user.notifications).not_to be_empty
     end
 
     it "does not send replied notification" do
