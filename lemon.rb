@@ -1,4 +1,7 @@
 class User
+  attr_accessor :has_notifications_disabled
+  alias_method :has_notifications_disabled?, :has_notifications_disabled
+
   def initialize(email: nil, password: nil)
     @password = password
     @signed_in = false
@@ -32,7 +35,7 @@ class User
     other_user.notifications << FollowedNotification.new(
       follower: self,
       user: other_user,
-    )
+    ) unless other_user.has_notifications_disabled?
   end
 
   def following?(other_user)
@@ -56,7 +59,7 @@ class User
     status_update.owner.notifications << RepostedNotification.new(
       reposter: self,
       status_update: status_update,
-    )
+    ) unless status_update.owner.has_notifications_disabled?
   end
 
   def notifications
@@ -89,7 +92,7 @@ class StatusUpdate
     @owner.notifications << FavoritedNotification.new(
       favoriter: user,
       status_update: self,
-    )
+    ) unless owner.has_notifications_disabled?
   end
 
   def favorited_by?(user)
@@ -111,7 +114,7 @@ class StatusUpdate
       sender: @owner,
       status_update: other_status_update,
       reply: self,
-    )
+    ) unless other_status_update.owner.has_notifications_disabled?
   end
 
   def reply_for?(other_status_update)
@@ -607,6 +610,35 @@ describe User do
           ))
         end
       end
+    end
+  end
+
+  describe "can disable all notifications" do
+    before do
+      user.has_notifications_disabled = true
+    end
+
+    it "does not send favorited notification" do
+      user.post(status_update)
+      other_user.favorite(status_update)
+      expect(user.notifications).to be_empty
+    end
+
+    it "does not send reposted notification" do
+      user.post(status_update)
+      other_user.repost(status_update)
+      expect(user.notifications).to be_empty
+    end
+
+    it "does not send followed notification" do
+      other_user.follow(user)
+      expect(user.notifications).to be_empty
+    end
+
+    it "does not send replied notification" do
+      user.post(status_update)
+      other_user.reply(status_update, StatusUpdate.new)
+      expect(user.notifications).to be_empty
     end
   end
 end
