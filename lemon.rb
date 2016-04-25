@@ -82,6 +82,11 @@ class User
     post(reply)
     reply.reply_for = status_update
   end
+
+  def unfollow(other_user)
+    @following ||= []
+    @following.delete(other_user)
+  end
 end
 
 class StatusUpdate
@@ -809,6 +814,29 @@ describe User do
       user.post(status_update)
       other_user.reply(status_update, StatusUpdate.new)
       expect(user.notifications).to be_empty
+    end
+  end
+
+  describe "can unfollow another user" do
+    before do
+      user.follow(other_user)
+    end
+
+    it "stops following" do
+      user.unfollow(other_user)
+      expect(user).not_to be_following(other_user)
+    end
+
+    context "when tried to follow multiple times" do
+      before do
+        user.follow(other_user)
+        user.follow(other_user)
+      end
+
+      it "still stops following" do
+        user.unfollow(other_user)
+        expect(user).not_to be_following(other_user)
+      end
     end
   end
 end
