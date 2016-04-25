@@ -105,6 +105,15 @@ class StatusUpdate
     repost_of == other_status_update
   end
 
+  def reply_for=(other_status_update)
+    @reply_for = other_status_update
+    other_status_update.owner.notifications << RepliedNotification.new(
+      sender: @owner,
+      status_update: other_status_update,
+      reply: self,
+    )
+  end
+
   def reply_for?(other_status_update)
     reply_for == other_status_update
   end
@@ -125,6 +134,12 @@ end
 class FollowedNotification < Struct.new(:follower, :user)
   def initialize(follower: nil, user: nil)
     super(follower, user)
+  end
+end
+
+class RepliedNotification < Struct.new(:sender, :status_update, :reply)
+  def initialize(sender: nil, status_update: nil, reply: nil)
+    super(sender, status_update, reply)
   end
 end
 
@@ -538,6 +553,60 @@ describe User do
     it "posts a reply to that and only to that status update" do
       user.reply(status_update, reply)
       expect(reply).not_to be_reply_for(another_status_update)
+    end
+  end
+
+  describe "is subscribed to reply notifications" do
+    context "when this user is not involved" do
+      before do
+        other_user.post(status_update)
+        another_user.reply(status_update, StatusUpdate.new)
+      end
+
+      it "does not send any notifications to this user" do
+        expect(user.notifications).to be_empty
+      end
+    end
+
+    context "when user owns status update that is replied to" do
+      let(:reply) { StatusUpdate.new }
+
+      before do
+        user.post(status_update)
+        other_user.reply(status_update, reply)
+      end
+
+      it "sends reply notification to this user" do
+        expect(user.notifications).to include(RepliedNotification.new(
+          sender: other_user,
+          status_update: status_update,
+          reply: reply,
+        ))
+      end
+
+      context "when multiple users have replied" do
+        let(:another_reply) { StatusUpdate.new }
+
+        before do
+          another_user.reply(status_update, another_reply)
+        end
+
+        it "sends reply notification to this user" do
+          expect(user.notifications).to include(RepliedNotification.new(
+            sender: another_user,
+            status_update: status_update,
+            reply: another_reply,
+          ))
+        end
+
+        it "preserves previous notifications for this user" do
+          expect(user.notifications).to include(RepliedNotification.new(
+            sender: other_user,
+            status_update: status_update,
+            reply: reply,
+          ))
+        end
+      end
     end
   end
 end
