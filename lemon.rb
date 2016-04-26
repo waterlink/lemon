@@ -77,12 +77,17 @@ class User
   end
 
   def favorite(status_update)
-    status_update.add_favorite_by(self)
+    status_update.favorited_by << self
+    status_update.owner.notifications << FavoritedNotification.new(
+      favoriter: self,
+      status_update: status_update,
+    ) unless status_update.owner.has_notifications_disabled? || status_update.owner.has_favorited_notification_disabled?
+
     Analytics.tag({name: "favorite_status_update"})
   end
 
   def repost(status_update)
-    post(StatusUpdate.repost_of(status_update))
+    post(StatusUpdate.new(repost_of: status_update))
     status_update.owner.notifications << RepostedNotification.new(
       reposter: self,
       status_update: status_update,
@@ -98,7 +103,14 @@ class User
 
   def reply(status_update, reply)
     post(reply)
+
     reply.reply_for = status_update
+    status_update.owner.notifications << RepliedNotification.new(
+      sender: reply.owner,
+      status_update: status_update,
+      reply: reply,
+    ) unless status_update.owner.has_notifications_disabled? || status_update.owner.has_replied_notification_disabled?
+
     Analytics.tag({name: "post_status_update", repost: false, reply: true})
   end
 
@@ -167,48 +179,20 @@ class User
 end
 
 class StatusUpdate
-  def self.repost_of(status_update)
-    StatusUpdate.new(repost_of: status_update)
-  end
-
   attr_accessor :owner, :reply_for
 
   attr_reader :repost_of
   protected :repost_of
 
+  attr_reader :favorited_by
+
   def initialize(repost_of: nil)
     @repost_of = repost_of
-  end
-
-  def add_favorite_by(user)
-    @favorited_by ||= []
-    @favorited_by << user
-    @owner.notifications << FavoritedNotification.new(
-      favoriter: user,
-      status_update: self,
-    ) unless owner.has_notifications_disabled? || owner.has_favorited_notification_disabled?
-  end
-
-  def favorited_by?(user)
-    @favorited_by ||= []
-    @favorited_by.include?(user)
-  end
-
-  def favorited_by
-    @favorited_by ||= []
+    @favorited_by = []
   end
 
   def repost_of?(other_status_update)
     repost_of == other_status_update
-  end
-
-  def reply_for=(other_status_update)
-    @reply_for = other_status_update
-    other_status_update.owner.notifications << RepliedNotification.new(
-      sender: @owner,
-      status_update: other_status_update,
-      reply: self,
-    ) unless other_status_update.owner.has_notifications_disabled? || other_status_update.owner.has_replied_notification_disabled?
   end
 
   def reply_for?(other_status_update)
@@ -455,17 +439,17 @@ describe User do
 
     it "favorites status update" do
       user.favorite(status_update)
-      expect(status_update).to be_favorited_by(user)
+      expect(status_update.favorited_by).to include(user)
     end
 
     it "is not considered as favorited by some other user" do
       user.favorite(status_update)
-      expect(status_update).not_to be_favorited_by(other_user)
+      expect(status_update.favorited_by).not_to include(other_user)
     end
 
     context "when user did not favorite this status update" do
       it "is not considered favorited by this user" do
-        expect(status_update).not_to be_favorited_by(user)
+        expect(status_update.favorited_by).not_to include(user)
       end
     end
 
@@ -477,7 +461,7 @@ describe User do
 
       it "is considered favorited by all of such users" do
         [user, other_user].each do |user|
-          expect(status_update).to be_favorited_by(user)
+          expect(status_update.favorited_by).to include(user)
         end
       end
     end
