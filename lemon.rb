@@ -179,20 +179,11 @@ class User
 end
 
 class StatusUpdate
-  attr_accessor :owner, :reply_for
-
-  attr_reader :repost_of
-  protected :repost_of
-
-  attr_reader :favorited_by
+  attr_accessor :owner, :reply_for, :repost_of, :favorited_by
 
   def initialize(repost_of: nil)
     @repost_of = repost_of
     @favorited_by = []
-  end
-
-  def repost_of?(other_status_update)
-    repost_of == other_status_update
   end
 
   def reply_for?(other_status_update)
@@ -501,7 +492,7 @@ describe User do
     subject(:repost) { other_user.status_updates.last }
 
     it "posts new status update" do
-      expect(repost).to be_repost_of(status_update)
+      expect(repost.repost_of).to eq(status_update)
     end
 
     it "is not the same status update" do
