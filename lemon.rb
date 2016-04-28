@@ -185,10 +185,6 @@ class StatusUpdate
     @repost_of = repost_of
     @favorited_by = []
   end
-
-  def reply_for?(other_status_update)
-    reply_for == other_status_update
-  end
 end
 
 class FavoritedNotification
@@ -669,12 +665,12 @@ describe User do
 
     it "posts a reply to that status update" do
       user.reply(status_update, reply)
-      expect(reply).to be_reply_for(status_update)
+      expect(reply.reply_for).to eq(status_update)
     end
 
     it "posts a reply to that and only to that status update" do
       user.reply(status_update, reply)
-      expect(reply).not_to be_reply_for(another_status_update)
+      expect(reply.reply_for).not_to eq(another_status_update)
     end
   end
 
