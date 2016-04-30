@@ -78,10 +78,11 @@ class User
 
   def favorite(status_update)
     status_update.favorited_by << self
-    status_update.owner.notifications << FavoritedNotification.new(
+    status_update.owner.notifications << {
+      kind: "favorited_notification",
       favoriter: self,
       status_update: status_update,
-    ) unless status_update.owner.has_notifications_disabled? || status_update.owner.has_favorited_notification_disabled?
+    } unless status_update.owner.has_notifications_disabled? || status_update.owner.has_favorited_notification_disabled?
 
     Analytics.tag({name: "favorite_status_update"})
   end
@@ -184,22 +185,6 @@ class StatusUpdate
   def initialize(repost_of: nil)
     @repost_of = repost_of
     @favorited_by = []
-  end
-end
-
-class FavoritedNotification
-  attr_reader :favoriter, :status_update
-  protected :favoriter, :status_update
-
-  def initialize(favoriter: nil, status_update: nil)
-    @favoriter = favoriter
-    @status_update = status_update
-  end
-
-  def ==(other)
-    return false unless other.is_a?(FavoritedNotification)
-    self.favoriter == other.favoriter &&
-      self.status_update == other.status_update
   end
 end
 
@@ -525,10 +510,11 @@ describe User do
         end
 
         it "creates an event in user's notifications" do
-          expect(user.notifications).to include(FavoritedNotification.new(
+          expect(user.notifications).to include({
+            kind: "favorited_notification",
             favoriter: other_user,
             status_update: status_update,
-          ))
+          })
         end
 
         context "when favorited by more users" do
@@ -537,17 +523,19 @@ describe User do
           end
 
           it "receives another notification" do
-            expect(user.notifications).to include(FavoritedNotification.new(
+            expect(user.notifications).to include({
+              kind: "favorited_notification",
               favoriter: another_user,
               status_update: status_update,
-            ))
+            })
           end
 
           it "still preserves old notifications" do
-            expect(user.notifications).to include(FavoritedNotification.new(
+            expect(user.notifications).to include({
+              kind: "favorited_notification",
               favoriter: other_user,
               status_update: status_update,
-            ))
+            })
           end
         end
       end
