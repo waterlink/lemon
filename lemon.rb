@@ -89,10 +89,11 @@ class User
 
   def repost(status_update)
     post(StatusUpdate.new(repost_of: status_update))
-    status_update.owner.notifications << RepostedNotification.new(
+    status_update.owner.notifications << {
+      kind: "reposted_notification",
       reposter: self,
       status_update: status_update,
-    ) unless status_update.owner.has_notifications_disabled? || status_update.owner.has_reposted_notification_disabled?
+    } unless status_update.owner.has_notifications_disabled? || status_update.owner.has_reposted_notification_disabled?
     Analytics.tag({name: "post_status_update", repost: true, reply: false})
   end
 
@@ -185,22 +186,6 @@ class StatusUpdate
   def initialize(repost_of: nil)
     @repost_of = repost_of
     @favorited_by = []
-  end
-end
-
-class RepostedNotification
-  attr_reader :reposter, :status_update
-  protected :reposter, :status_update
-
-  def initialize(reposter: nil, status_update: nil)
-    @reposter = reposter
-    @status_update = status_update
-  end
-
-  def ==(other)
-    return false unless other.is_a?(RepostedNotification)
-    self.reposter == other.reposter &&
-      self.status_update == other.status_update
   end
 end
 
@@ -565,10 +550,11 @@ describe User do
         end
 
         it "sends repost notification to this user" do
-          expect(user.notifications).to include(RepostedNotification.new(
+          expect(user.notifications).to include({
+            kind: "reposted_notification",
             reposter: other_user,
             status_update: status_update,
-          ))
+          })
         end
 
         context "when reposted by more users" do
@@ -577,17 +563,19 @@ describe User do
           end
 
           it "sends repost notification to this user" do
-            expect(user.notifications).to include(RepostedNotification.new(
+            expect(user.notifications).to include({
+              kind: "reposted_notification",
               reposter: another_user,
               status_update: status_update,
-            ))
+            })
           end
 
           it "preserves previous notifications for this user" do
-            expect(user.notifications).to include(RepostedNotification.new(
+            expect(user.notifications).to include({
+              kind: "reposted_notification",
               reposter: other_user,
               status_update: status_update,
-            ))
+            })
           end
         end
       end
