@@ -54,10 +54,11 @@ class User
 
     @following ||= []
     @following << other_user
-    other_user.notifications << FollowedNotification.new(
+    other_user.notifications << {
+      kind: "followed_notification",
       follower: self,
       user: other_user,
-    ) unless other_user.has_notifications_disabled? || other_user.has_followed_notification_disabled?
+    } unless other_user.has_notifications_disabled? || other_user.has_followed_notification_disabled?
 
     Analytics.tag({name: "follow_user"})
   end
@@ -186,22 +187,6 @@ class StatusUpdate
   def initialize(repost_of: nil)
     @repost_of = repost_of
     @favorited_by = []
-  end
-end
-
-class FollowedNotification
-  attr_reader :follower, :user
-  protected :follower, :user
-
-  def initialize(follower: nil, user: nil)
-    @follower = follower
-    @user = user
-  end
-
-  def ==(other)
-    return false unless other.is_a?(FollowedNotification)
-    self.follower == other.follower &&
-      self.user == other.user
   end
 end
 
@@ -599,10 +584,11 @@ describe User do
       end
 
       it "sends followed notification to this user" do
-        expect(user.notifications).to include(FollowedNotification.new(
+        expect(user.notifications).to include({
+          kind: "followed_notification",
           follower: other_user,
           user: user,
-        ))
+        })
       end
 
       context "when followed by many users" do
@@ -611,17 +597,19 @@ describe User do
         end
 
         it "sends followed notification to this user" do
-          expect(user.notifications).to include(FollowedNotification.new(
+          expect(user.notifications).to include({
+            kind: "followed_notification",
             follower: another_user,
             user: user,
-          ))
+          })
         end
 
         it "preserves previous notifications for this user" do
-          expect(user.notifications).to include(FollowedNotification.new(
+          expect(user.notifications).to include({
+            kind: "followed_notification",
             follower: other_user,
             user: user,
-          ))
+          })
         end
       end
     end
