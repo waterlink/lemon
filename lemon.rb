@@ -1,3 +1,5 @@
+require "yaml"
+
 class User
   attr_accessor :has_notifications_disabled
   alias_method :has_notifications_disabled?, :has_notifications_disabled
@@ -14,10 +16,21 @@ class User
   attr_accessor :has_replied_notification_disabled
   alias_method :has_replied_notification_disabled?, :has_replied_notification_disabled
 
-  def initialize(email: nil, password: nil)
+  def self.find(id)
+    found = Database.find("users", id)
+    found && new(email: found[0], password: found[1], __save__: false)
+  end
+
+  attr_reader :id
+
+  def initialize(email: nil, password: nil, __save__: true)
     @password = password
     @signed_in = false
-    Analytics.tag({name: "created_user"})
+
+    if __save__
+      @id = Database.insert("users", [email, password])
+      Analytics.tag({name: "created_user"})
+    end
   end
 
   def sign_in_via_password(password)
@@ -199,6 +212,31 @@ module Analytics
   end
 end
 
+module Database
+  extend self
+
+  def insert(table, values)
+    unless values.all? { |v| v.is_a?(String) }
+      fail ArgumentError, "All values have to be strings: #{values}"
+    end
+
+    filename = "#{ENV["HOME"]}/.lemon/database/#{table}.yml"
+    table = YAML.load_file(filename) rescue []
+    id = table.count
+    table << [id, values]
+    File.open(filename, "w") { |f| f.write(table.to_yaml) }
+
+    id
+  end
+
+  def find(table, id)
+    filename = "#{ENV["HOME"]}/.lemon/database/#{table}.yml"
+    table = YAML.load_file(filename) rescue []
+    found = table.find { |row| row[0] == id }
+    found && found[1]
+  end
+end
+
 describe User do
   let(:email) { "john@example.org" }
 
@@ -206,21 +244,24 @@ describe User do
   let(:incorrect_password) { "incorrect password" }
 
   let(:user) do
-    User.new(email: email, password: correct_password)
+    u = User.new(email: email, password: correct_password)
+    User.find(u.id)
   end
 
   let(:other_user) do
-    User.new(
+    u = User.new(
       email: "sarah@example.org",
       password: "welcome",
     )
+    User.find(u.id)
   end
 
   let(:another_user) do
-    User.new(
+    u = User.new(
       email: "jonatan@example.org",
       password: "welcome",
     )
+    User.find(u.id)
   end
 
   let(:status_update) { StatusUpdate.new }
@@ -284,10 +325,11 @@ describe User do
 
     context "when user have not followed other user yet" do
       let(:other_user) do
-        User.new(
+        u = User.new(
           email: "james@example.org",
           password: "welcome",
         )
+        User.find(u.id)
       end
 
       it "does not follow other user" do
@@ -297,10 +339,11 @@ describe User do
 
     context "when already following some users" do
       let(:already_following_user) do
-        User.new(
+        u = User.new(
           email: "blake@example.org",
           password: "welcome",
         )
+        User.find(u.id)
       end
 
       before do
