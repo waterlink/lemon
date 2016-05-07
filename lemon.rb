@@ -18,18 +18,20 @@ class User
 
   def self.find(id)
     found = Database.find("users", id)
-    found && new(email: found[0], password: found[1], __save__: false)
+    found && new(email: found[0], password: found[1], __save__: false, id: id)
   end
 
   attr_reader :id
 
-  def initialize(email: nil, password: nil, __save__: true)
+  def initialize(email: nil, password: nil, __save__: true, id: nil)
     @password = password
     @signed_in = false
 
     if __save__
       @id = Database.insert("users", [email, password])
       Analytics.tag({name: "created_user"})
+    else
+      @id = id
     end
   end
 
@@ -49,14 +51,29 @@ class User
   end
 
   def post(status_update)
-    @status_updates ||= []
-    @status_updates << status_update
     status_update.owner = self
+
+    status_update.id = Database.insert("status_updates", [
+      status_update.owner.id.to_s,
+      status_update.reply_for && status_update.reply_for.id.to_s || "",
+      status_update.repost_of && status_update.repost_of.id.to_s || "",
+    ])
+
     Analytics.tag({name: "post_status_update", repost: false, reply: false})
   end
 
   def status_updates
-    @status_updates ||= []
+    Database
+      .where("status_updates") { |x| x[1][0] == self.id.to_s }
+      .map do |row|
+        id, values = row
+        StatusUpdate.new(
+          id: id,
+          owner_id: values[0].to_i,
+          reply_for_id: values[1].to_i,
+          repost_of_id: values[2].to_i,
+        )
+      end
   end
 
   def follow(other_user)
@@ -196,11 +213,46 @@ class User
 end
 
 class StatusUpdate
-  attr_accessor :owner, :reply_for, :repost_of, :favorited_by
+  attr_accessor :favorited_by
 
-  def initialize(repost_of: nil)
+  attr_writer :owner, :reply_for, :repost_of
+  attr_accessor :id, :owner_id, :reply_for_id, :repost_of_id
+
+  def self.find(id)
+    found = Database.find("status_updates", id)
+    found && new(owner_id: found[0].to_i, reply_for_id: found[1].to_i, repost_of_id: found[2].to_i, id: id)
+  end
+
+  def initialize(owner_id: nil, reply_for_id: nil, repost_of_id: nil, repost_of: nil, id: nil)
+    @id = id
+    @owner_id = owner_id
+    @reply_for_id = reply_for_id
     @repost_of = repost_of
+    @repost_of_id = repost_of_id unless repost_of
     @favorited_by = []
+  end
+
+  def ==(other)
+    return false unless other.is_a?(StatusUpdate)
+    return id == other.id if id || other.id
+
+    equality_criteria == other.equality_criteria
+  end
+
+  def equality_criteria
+    [owner_id, reply_for_id, repost_of_id]
+  end
+
+  def owner
+    @owner ||= owner_id && User.find(owner_id)
+  end
+
+  def reply_for
+    @reply_for ||= reply_for_id && StatusUpdate.find(reply_for_id)
+  end
+
+  def repost_of
+    @repost_of ||= repost_of_id && StatusUpdate.find(repost_of_id)
   end
 end
 
@@ -235,6 +287,24 @@ module Database
     found = table.find { |row| row[0] == id }
     found && found[1]
   end
+
+  def where(table, &block)
+    filename = "#{ENV["HOME"]}/.lemon/database/#{table}.yml"
+    table = YAML.load_file(filename) rescue []
+    table.select(&block)
+  end
+
+  def _clear(table)
+    filename = "#{ENV["HOME"]}/.lemon/database/#{table}.yml"
+    `rm #{filename}`
+  end
+end
+
+RSpec.configure do |c|
+  c.before(:suite) {
+    Database._clear("users")
+    Database._clear("status_updates")
+  }
 end
 
 describe User do
