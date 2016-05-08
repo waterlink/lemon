@@ -54,10 +54,11 @@ class User
 
     @following ||= []
     @following << other_user
-    other_user.notifications << FollowedNotification.new(
+    other_user.notifications << {
+      kind: "followed_notification",
       follower: self,
       user: other_user,
-    ) unless other_user.has_notifications_disabled? || other_user.has_followed_notification_disabled?
+    } unless other_user.has_notifications_disabled? || other_user.has_followed_notification_disabled?
 
     Analytics.tag({name: "follow_user"})
   end
@@ -77,16 +78,23 @@ class User
   end
 
   def favorite(status_update)
-    status_update.add_favorite_by(self)
+    status_update.favorited_by << self
+    status_update.owner.notifications << {
+      kind: "favorited_notification",
+      favoriter: self,
+      status_update: status_update,
+    } unless status_update.owner.has_notifications_disabled? || status_update.owner.has_favorited_notification_disabled?
+
     Analytics.tag({name: "favorite_status_update"})
   end
 
   def repost(status_update)
-    post(StatusUpdate.repost_of(status_update))
-    status_update.owner.notifications << RepostedNotification.new(
+    post(StatusUpdate.new(repost_of: status_update))
+    status_update.owner.notifications << {
+      kind: "reposted_notification",
       reposter: self,
       status_update: status_update,
-    ) unless status_update.owner.has_notifications_disabled? || status_update.owner.has_reposted_notification_disabled?
+    } unless status_update.owner.has_notifications_disabled? || status_update.owner.has_reposted_notification_disabled?
     Analytics.tag({name: "post_status_update", repost: true, reply: false})
   end
 
@@ -98,7 +106,15 @@ class User
 
   def reply(status_update, reply)
     post(reply)
+
     reply.reply_for = status_update
+    status_update.owner.notifications << {
+      kind: "replied_notification",
+      sender: reply.owner,
+      status_update: status_update,
+      reply: reply,
+    } unless status_update.owner.has_notifications_disabled? || status_update.owner.has_replied_notification_disabled?
+
     Analytics.tag({name: "post_status_update", repost: false, reply: true})
   end
 
@@ -167,118 +183,11 @@ class User
 end
 
 class StatusUpdate
-  def self.repost_of(status_update)
-    StatusUpdate.new(repost_of: status_update)
-  end
-
-  attr_accessor :owner, :reply_for
-
-  attr_reader :repost_of
-  protected :repost_of
+  attr_accessor :owner, :reply_for, :repost_of, :favorited_by
 
   def initialize(repost_of: nil)
     @repost_of = repost_of
-  end
-
-  def add_favorite_by(user)
-    @favorited_by ||= []
-    @favorited_by << user
-    @owner.notifications << FavoritedNotification.new(
-      favoriter: user,
-      status_update: self,
-    ) unless owner.has_notifications_disabled? || owner.has_favorited_notification_disabled?
-  end
-
-  def favorited_by?(user)
-    @favorited_by ||= []
-    @favorited_by.include?(user)
-  end
-
-  def favorited_by
-    @favorited_by ||= []
-  end
-
-  def repost_of?(other_status_update)
-    repost_of == other_status_update
-  end
-
-  def reply_for=(other_status_update)
-    @reply_for = other_status_update
-    other_status_update.owner.notifications << RepliedNotification.new(
-      sender: @owner,
-      status_update: other_status_update,
-      reply: self,
-    ) unless other_status_update.owner.has_notifications_disabled? || other_status_update.owner.has_replied_notification_disabled?
-  end
-
-  def reply_for?(other_status_update)
-    reply_for == other_status_update
-  end
-end
-
-class FavoritedNotification
-  attr_reader :favoriter, :status_update
-  protected :favoriter, :status_update
-
-  def initialize(favoriter: nil, status_update: nil)
-    @favoriter = favoriter
-    @status_update = status_update
-  end
-
-  def ==(other)
-    return false unless other.is_a?(FavoritedNotification)
-    self.favoriter == other.favoriter &&
-      self.status_update == other.status_update
-  end
-end
-
-class RepostedNotification
-  attr_reader :reposter, :status_update
-  protected :reposter, :status_update
-
-  def initialize(reposter: nil, status_update: nil)
-    @reposter = reposter
-    @status_update = status_update
-  end
-
-  def ==(other)
-    return false unless other.is_a?(RepostedNotification)
-    self.reposter == other.reposter &&
-      self.status_update == other.status_update
-  end
-end
-
-class FollowedNotification
-  attr_reader :follower, :user
-  protected :follower, :user
-
-  def initialize(follower: nil, user: nil)
-    @follower = follower
-    @user = user
-  end
-
-  def ==(other)
-    return false unless other.is_a?(FollowedNotification)
-    self.follower == other.follower &&
-      self.user == other.user
-  end
-end
-
-class RepliedNotification
-  attr_reader :sender, :status_update, :reply
-  protected :sender, :status_update, :reply
-
-  def initialize(sender: nil, status_update: nil, reply: nil)
-    @sender = sender
-    @status_update = status_update
-    @reply = reply
-  end
-
-  def ==(other)
-    return false unless other.is_a?(RepliedNotification)
-    self.sender == other.sender &&
-      self.status_update == other.status_update &&
-      self.reply == other.reply
+    @favorited_by = []
   end
 end
 
@@ -455,17 +364,17 @@ describe User do
 
     it "favorites status update" do
       user.favorite(status_update)
-      expect(status_update).to be_favorited_by(user)
+      expect(status_update.favorited_by).to include(user)
     end
 
     it "is not considered as favorited by some other user" do
       user.favorite(status_update)
-      expect(status_update).not_to be_favorited_by(other_user)
+      expect(status_update.favorited_by).not_to include(other_user)
     end
 
     context "when user did not favorite this status update" do
       it "is not considered favorited by this user" do
-        expect(status_update).not_to be_favorited_by(user)
+        expect(status_update.favorited_by).not_to include(user)
       end
     end
 
@@ -477,7 +386,7 @@ describe User do
 
       it "is considered favorited by all of such users" do
         [user, other_user].each do |user|
-          expect(status_update).to be_favorited_by(user)
+          expect(status_update.favorited_by).to include(user)
         end
       end
     end
@@ -517,7 +426,7 @@ describe User do
     subject(:repost) { other_user.status_updates.last }
 
     it "posts new status update" do
-      expect(repost).to be_repost_of(status_update)
+      expect(repost.repost_of).to eq(status_update)
     end
 
     it "is not the same status update" do
@@ -554,10 +463,11 @@ describe User do
         end
 
         it "creates an event in user's notifications" do
-          expect(user.notifications).to include(FavoritedNotification.new(
+          expect(user.notifications).to include({
+            kind: "favorited_notification",
             favoriter: other_user,
             status_update: status_update,
-          ))
+          })
         end
 
         context "when favorited by more users" do
@@ -566,17 +476,19 @@ describe User do
           end
 
           it "receives another notification" do
-            expect(user.notifications).to include(FavoritedNotification.new(
+            expect(user.notifications).to include({
+              kind: "favorited_notification",
               favoriter: another_user,
               status_update: status_update,
-            ))
+            })
           end
 
           it "still preserves old notifications" do
-            expect(user.notifications).to include(FavoritedNotification.new(
+            expect(user.notifications).to include({
+              kind: "favorited_notification",
               favoriter: other_user,
               status_update: status_update,
-            ))
+            })
           end
         end
       end
@@ -606,10 +518,11 @@ describe User do
         end
 
         it "sends repost notification to this user" do
-          expect(user.notifications).to include(RepostedNotification.new(
+          expect(user.notifications).to include({
+            kind: "reposted_notification",
             reposter: other_user,
             status_update: status_update,
-          ))
+          })
         end
 
         context "when reposted by more users" do
@@ -618,17 +531,19 @@ describe User do
           end
 
           it "sends repost notification to this user" do
-            expect(user.notifications).to include(RepostedNotification.new(
+            expect(user.notifications).to include({
+              kind: "reposted_notification",
               reposter: another_user,
               status_update: status_update,
-            ))
+            })
           end
 
           it "preserves previous notifications for this user" do
-            expect(user.notifications).to include(RepostedNotification.new(
+            expect(user.notifications).to include({
+              kind: "reposted_notification",
               reposter: other_user,
               status_update: status_update,
-            ))
+            })
           end
         end
       end
@@ -652,10 +567,11 @@ describe User do
       end
 
       it "sends followed notification to this user" do
-        expect(user.notifications).to include(FollowedNotification.new(
+        expect(user.notifications).to include({
+          kind: "followed_notification",
           follower: other_user,
           user: user,
-        ))
+        })
       end
 
       context "when followed by many users" do
@@ -664,17 +580,19 @@ describe User do
         end
 
         it "sends followed notification to this user" do
-          expect(user.notifications).to include(FollowedNotification.new(
+          expect(user.notifications).to include({
+            kind: "followed_notification",
             follower: another_user,
             user: user,
-          ))
+          })
         end
 
         it "preserves previous notifications for this user" do
-          expect(user.notifications).to include(FollowedNotification.new(
+          expect(user.notifications).to include({
+            kind: "followed_notification",
             follower: other_user,
             user: user,
-          ))
+          })
         end
       end
     end
@@ -694,12 +612,12 @@ describe User do
 
     it "posts a reply to that status update" do
       user.reply(status_update, reply)
-      expect(reply).to be_reply_for(status_update)
+      expect(reply.reply_for).to eq(status_update)
     end
 
     it "posts a reply to that and only to that status update" do
       user.reply(status_update, reply)
-      expect(reply).not_to be_reply_for(another_status_update)
+      expect(reply.reply_for).not_to eq(another_status_update)
     end
   end
 
@@ -724,11 +642,12 @@ describe User do
       end
 
       it "sends reply notification to this user" do
-        expect(user.notifications).to include(RepliedNotification.new(
+        expect(user.notifications).to include({
+          kind: "replied_notification",
           sender: other_user,
           status_update: status_update,
           reply: reply,
-        ))
+        })
       end
 
       context "when multiple users have replied" do
@@ -739,19 +658,21 @@ describe User do
         end
 
         it "sends reply notification to this user" do
-          expect(user.notifications).to include(RepliedNotification.new(
+          expect(user.notifications).to include({
+            kind: "replied_notification",
             sender: another_user,
             status_update: status_update,
             reply: another_reply,
-          ))
+          })
         end
 
         it "preserves previous notifications for this user" do
-          expect(user.notifications).to include(RepliedNotification.new(
+          expect(user.notifications).to include({
+            kind: "replied_notification",
             sender: other_user,
             status_update: status_update,
             reply: reply,
-          ))
+          })
         end
       end
     end
