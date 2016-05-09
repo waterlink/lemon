@@ -94,11 +94,13 @@ class User
       other_user.id.to_s,
     ])
 
-    other_user.notifications << {
-      kind: "followed_notification",
-      follower: self,
-      user: other_user,
-    } unless other_user.has_notifications_disabled? || other_user.has_followed_notification_disabled?
+    unless other_user.has_notifications_disabled? || other_user.has_followed_notification_disabled?
+      Database.insert("notifications", [
+        "followed_notification",
+        id.to_s,
+        other_user.id.to_s,
+      ])
+    end
 
     Analytics.tag({name: "follow_user"})
   end
@@ -151,8 +153,20 @@ class User
   end
 
   def notifications
-    (@notifications ||= []).tap do |notifications|
+    @notifications ||= begin
+      notifications = Database
+        .where("notifications") { |x| x[1][2] == id.to_s }
+        .map do |row|
+          id, values = row
+          {
+            kind: values[0],
+            follower: User.find(values[1].to_i),
+            user: User.find(values[2].to_i),
+          }
+        end
+
       Analytics.tag({name: "fetch_notifications", count: notifications.count})
+      notifications
     end
   end
 
@@ -363,6 +377,7 @@ RSpec.configure do |c|
     Database._clear("users")
     Database._clear("status_updates")
     Database._clear("follows")
+    Database._clear("notifications")
   }
 end
 
