@@ -35,6 +35,13 @@ class User
     end
   end
 
+  def ==(other)
+    return false unless other.is_a?(User)
+    return id == other.id if id || other.id
+
+    email == other.email
+  end
+
   def sign_in_via_password(password)
     @signed_in = (@password == password).tap do |success|
       Analytics.tag({name: "password_sign_in", success: success})
@@ -64,7 +71,7 @@ class User
 
   def status_updates
     Database
-      .where("status_updates") { |x| x[1][0] == self.id.to_s }
+      .where("status_updates") { |x| x[1][0] == id.to_s }
       .map do |row|
         id, values = row
         StatusUpdate.new(
@@ -82,8 +89,11 @@ class User
       return
     end
 
-    @following ||= []
-    @following << other_user
+    Database.insert("follows", [
+      id.to_s,
+      other_user.id.to_s,
+    ])
+
     other_user.notifications << {
       kind: "followed_notification",
       follower: self,
@@ -93,14 +103,26 @@ class User
     Analytics.tag({name: "follow_user"})
   end
 
+  def following
+    Database
+      .where("follows") { |x| x[1][0] == id.to_s }
+      .map do |row|
+        id, values = row
+        Follow.new(
+          id: id,
+          user_id: values[0],
+          other_user_id: values[1],
+        )
+      end
+  end
+
   def following?(other_user)
-    @following ||= []
-    @following.include?(other_user)
+    following.any? { |f| f.other_user == other_user }
   end
 
   def feed
-    @following ||= []
-    @following
+    following
+      .map(&:other_user)
       .map(&:status_updates)
       .reduce([], &:+).tap do |feed|
         Analytics.tag({name: "fetch_feed", count: feed.count})
@@ -149,8 +171,13 @@ class User
   end
 
   def unfollow(other_user)
-    @following ||= []
-    @following.delete(other_user)
+    Database
+      .where("follows") { |x| x[1] == [id.to_s, other_user.id.to_s] }
+      .each do |row|
+        id, _ = row
+        Database.delete("follows", id)
+      end
+
     Analytics.tag({name: "unfollow_user"})
   end
 
@@ -212,6 +239,26 @@ class User
   end
 end
 
+class Follow
+  attr_reader :id, :user_id, :other_user_id
+
+  def initialize(id: nil, user_id: nil, other_user_id: nil, user: nil, other_user: nil)
+    @id = id
+    @user = user
+    @user_id = user_id unless user
+    @other_user = other_user
+    @other_user_id = other_user_id unless other_user
+  end
+
+  def user
+    @user ||= user_id && User.find(user_id.to_i)
+  end
+
+  def other_user
+    @other_user ||= other_user_id && User.find(other_user_id.to_i)
+  end
+end
+
 class StatusUpdate
   attr_accessor :favorited_by
 
@@ -240,7 +287,11 @@ class StatusUpdate
   end
 
   def equality_criteria
-    [owner_id, reply_for_id, repost_of_id]
+    [
+      owner_id || (owner && owner.id),
+      reply_for_id || (reply_for && reply_for.id),
+      repost_of_id || (repost_of && repost_of.id),
+    ]
   end
 
   def owner
@@ -294,6 +345,13 @@ module Database
     table.select(&block)
   end
 
+  def delete(table, id)
+    filename = "#{ENV["HOME"]}/.lemon/database/#{table}.yml"
+    table = YAML.load_file(filename) rescue []
+    table = table.reject { |x| x[0] == id }
+    File.open(filename, "w") { |f| f.write(table.to_yaml) }
+  end
+
   def _clear(table)
     filename = "#{ENV["HOME"]}/.lemon/database/#{table}.yml"
     `rm #{filename}`
@@ -304,6 +362,7 @@ RSpec.configure do |c|
   c.before(:suite) {
     Database._clear("users")
     Database._clear("status_updates")
+    Database._clear("follows")
   }
 end
 
