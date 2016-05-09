@@ -94,13 +94,12 @@ class User
       other_user.id.to_s,
     ])
 
-    unless other_user.has_notifications_disabled? || other_user.has_followed_notification_disabled?
-      Database.insert("notifications", [
-        "followed_notification",
-        id.to_s,
-        other_user.id.to_s,
-      ])
-    end
+
+    Database.insert("notifications", [
+      "followed_notification",
+      id.to_s,
+      other_user.id.to_s,
+    ]) unless other_user.has_notifications_disabled? || other_user.has_followed_notification_disabled?
 
     Analytics.tag({name: "follow_user"})
   end
@@ -119,7 +118,9 @@ class User
   end
 
   def following?(other_user)
-    following.any? { |f| f.other_user == other_user }
+    Database
+      .where("follows") { |x| x[1] == [id.to_s, other_user.id.to_s] }
+      .any?
   end
 
   def feed
@@ -132,7 +133,11 @@ class User
   end
 
   def favorite(status_update)
-    status_update.favorited_by << self
+    Database.insert("favorites", [
+      status_update.id.to_s,
+      id.to_s,
+    ])
+
     status_update.owner.notifications << {
       kind: "favorited_notification",
       favoriter: self,
@@ -274,8 +279,6 @@ class Follow
 end
 
 class StatusUpdate
-  attr_accessor :favorited_by
-
   attr_writer :owner, :reply_for, :repost_of
   attr_accessor :id, :owner_id, :reply_for_id, :repost_of_id
 
@@ -290,7 +293,6 @@ class StatusUpdate
     @reply_for_id = reply_for_id
     @repost_of = repost_of
     @repost_of_id = repost_of_id unless repost_of
-    @favorited_by = []
   end
 
   def ==(other)
@@ -318,6 +320,15 @@ class StatusUpdate
 
   def repost_of
     @repost_of ||= repost_of_id && StatusUpdate.find(repost_of_id)
+  end
+
+  def favorited_by
+    Database
+      .where("favorites") { |x| x[1][0] == id.to_s }
+      .map do |row|
+        _, values = row
+        User.find(values[1].to_i)
+      end
   end
 end
 
@@ -378,6 +389,7 @@ RSpec.configure do |c|
     Database._clear("status_updates")
     Database._clear("follows")
     Database._clear("notifications")
+    Database._clear("favorites")
   }
 end
 
