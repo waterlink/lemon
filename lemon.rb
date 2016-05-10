@@ -520,6 +520,8 @@ module Database
   end
 end
 
+require "rspec"
+
 RSpec.configure do |c|
   c.before {
     Database._clear("users")
