@@ -94,7 +94,6 @@ class User
       other_user.id.to_s,
     ])
 
-
     Database.insert("notifications", [
       "followed_notification",
       id.to_s,
@@ -138,53 +137,81 @@ class User
       id.to_s,
     ])
 
-    status_update.owner.notifications << {
-      kind: "favorited_notification",
-      favoriter: self,
-      status_update: status_update,
-    } unless status_update.owner.has_notifications_disabled? || status_update.owner.has_favorited_notification_disabled?
+    Database.insert("notifications", [
+      "favorited_notification",
+      id.to_s,
+      status_update.id.to_s,
+    ]) unless status_update.owner.has_notifications_disabled? || status_update.owner.has_favorited_notification_disabled?
 
     Analytics.tag({name: "favorite_status_update"})
   end
 
   def repost(status_update)
     post(StatusUpdate.new(repost_of: status_update))
-    status_update.owner.notifications << {
-      kind: "reposted_notification",
-      reposter: self,
-      status_update: status_update,
-    } unless status_update.owner.has_notifications_disabled? || status_update.owner.has_reposted_notification_disabled?
+
+    Database.insert("notifications", [
+      "reposted_notification",
+      id.to_s,
+      status_update.id.to_s,
+    ]) unless status_update.owner.has_notifications_disabled? || status_update.owner.has_reposted_notification_disabled?
+
     Analytics.tag({name: "post_status_update", repost: true, reply: false})
   end
 
   def notifications
-    @notifications ||= begin
-      notifications = Database
-        .where("notifications") { |x| x[1][2] == id.to_s }
-        .map do |row|
-          id, values = row
+    notifications = Database
+      .where("notifications") do |x|
+        (x[1][0] == "followed_notification" && x[1][2] == id.to_s) ||
+        (x[1][0] == "favorited_notification" && StatusUpdate.find(x[1][2].to_i).owner_id == id) ||
+        (x[1][0] == "replied_notification" && StatusUpdate.find(x[1][2].to_i).owner_id == id) ||
+        (x[1][0] == "reposted_notification" && StatusUpdate.find(x[1][2].to_i).owner_id == id)
+      end.map do |row|
+        id, values = row
+        kind = values[0]
+
+        if kind == "followed_notification"
           {
-            kind: values[0],
+            kind: kind,
             follower: User.find(values[1].to_i),
             user: User.find(values[2].to_i),
           }
+        elsif kind == "favorited_notification"
+          {
+            kind: kind,
+            favoriter: User.find(values[1].to_i),
+            status_update: StatusUpdate.find(values[2].to_i),
+          }
+        elsif kind == "replied_notification"
+          {
+            kind: kind,
+            sender: User.find(values[1].to_i),
+            status_update: StatusUpdate.find(values[2].to_i),
+            reply: StatusUpdate.find(values[3].to_i),
+          }
+        elsif kind == "reposted_notification"
+          {
+            kind: kind,
+            reposter: User.find(values[1].to_i),
+            status_update: StatusUpdate.find(values[2].to_i),
+          }
         end
+      end
 
-      Analytics.tag({name: "fetch_notifications", count: notifications.count})
-      notifications
-    end
+    Analytics.tag({name: "fetch_notifications", count: notifications.count})
+    notifications
   end
 
   def reply(status_update, reply)
     post(reply)
 
     reply.reply_for = status_update
-    status_update.owner.notifications << {
-      kind: "replied_notification",
-      sender: reply.owner,
-      status_update: status_update,
-      reply: reply,
-    } unless status_update.owner.has_notifications_disabled? || status_update.owner.has_replied_notification_disabled?
+
+    Database.insert("notifications", [
+      "replied_notification",
+      reply.owner.id.to_s,
+      status_update.id.to_s,
+      reply.id.to_s,
+    ]) unless status_update.owner.has_notifications_disabled? || status_update.owner.has_replied_notification_disabled?
 
     Analytics.tag({name: "post_status_update", repost: false, reply: true})
   end
