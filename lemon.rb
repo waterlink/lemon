@@ -1,7 +1,7 @@
 require "yaml"
 
 class User
-  attr_accessor :has_notifications_disabled
+  attr_reader :has_notifications_disabled
   alias_method :has_notifications_disabled?, :has_notifications_disabled
 
   attr_accessor :has_favorited_notification_disabled
@@ -18,17 +18,47 @@ class User
 
   def self.find(id)
     found = Database.find("users", id)
-    found && new(email: found[0], password: found[1], __save__: false, id: id)
+    found && new(
+      __save__: false,
+      id: id,
+      email: found[0],
+      password: found[1],
+      has_notifications_disabled: found[2] == "true",
+      has_replied_notification_disabled: found[3] == "true",
+      has_followed_notification_disabled: found[4] == "true",
+      has_reposted_notification_disabled: found[5] == "true",
+      has_favorited_notification_disabled: found[6] == "true",
+    )
   end
 
-  attr_reader :id
+  attr_reader :id, :email
 
-  def initialize(email: nil, password: nil, __save__: true, id: nil)
+  def initialize(email: nil, password: nil, __save__: true, id: nil,
+    has_notifications_disabled: false, has_favorited_notification_disabled: false,
+    has_reposted_notification_disabled: false, has_followed_notification_disabled: false,
+    has_replied_notification_disabled: false)
+
+    @email = email
     @password = password
     @signed_in = false
 
+    @has_notifications_disabled = has_notifications_disabled
+    @has_replied_notification_disabled = has_replied_notification_disabled
+    @has_followed_notification_disabled = has_followed_notification_disabled
+    @has_reposted_notification_disabled = has_reposted_notification_disabled
+    @has_favorited_notification_disabled = has_favorited_notification_disabled
+
     if __save__
-      @id = Database.insert("users", [email, password])
+      @id = Database.insert("users", [
+        @email,
+        @password,
+        has_notifications_disabled.to_s,
+        has_replied_notification_disabled.to_s,
+        has_followed_notification_disabled.to_s,
+        has_reposted_notification_disabled.to_s,
+        has_favorited_notification_disabled.to_s,
+      ])
+
       Analytics.tag({name: "created_user"})
     else
       @id = id
@@ -228,19 +258,35 @@ class User
   end
 
   def block(other_user)
-    @blocking ||= []
-    @blocking << other_user
+    Database.insert("blocks", [
+      id.to_s,
+      other_user.id.to_s,
+    ])
+
     other_user.unfollow(self)
+
     Analytics.tag({name: "block_user"})
   end
 
   def blocking?(other_user)
-    @blocking ||= []
-    @blocking.include?(other_user)
+    Database
+      .where("blocks") { |x| x[1][0] == id.to_s && x[1][1] == other_user.id.to_s }
+      .any?
   end
 
   def has_notifications_disabled=(value)
     @has_notifications_disabled = value
+
+    Database.update("users", id, [
+      email,
+      @password,
+      value.to_s,
+      has_replied_notification_disabled.to_s,
+      has_followed_notification_disabled.to_s,
+      has_reposted_notification_disabled.to_s,
+      has_favorited_notification_disabled.to_s,
+    ])
+
     if value
       Analytics.tag({name: "disabled_notifications"})
     else
@@ -382,6 +428,25 @@ module Database
     File.open(filename, "w") { |f| f.write(table.to_yaml) }
 
     id
+  end
+
+  def update(table, id, values)
+    unless values.all? { |v| v.is_a?(String) }
+      fail ArgumentError, "All values have to be strings: #{values}"
+    end
+
+    filename = "#{ENV["HOME"]}/.lemon/database/#{table}.yml"
+    table = YAML.load_file(filename) rescue []
+
+    table = table.map do |row|
+      if row[0] == id
+        [id, values]
+      else
+        row
+      end
+    end
+
+    File.open(filename, "w") { |f| f.write(table.to_yaml) }
   end
 
   def find(table, id)
