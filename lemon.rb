@@ -1,4 +1,5 @@
 require "yaml"
+require "json"
 
 class User
   attr_reader :has_notifications_disabled
@@ -453,7 +454,7 @@ module Analytics
   extend self
 
   def tag(event)
-    puts "fake analytics: tagged #{event.inspect}"
+    Database.insert("tagged_events", [event.to_json])
   end
 end
 
@@ -515,18 +516,19 @@ module Database
 
   def _clear(table)
     filename = "#{ENV["HOME"]}/.lemon/database/#{table}.yml"
-    `rm #{filename}`
+    `rm #{filename}` if File.exists?(filename)
   end
 end
 
 RSpec.configure do |c|
-  c.before(:suite) {
+  c.before {
     Database._clear("users")
     Database._clear("status_updates")
     Database._clear("follows")
     Database._clear("notifications")
     Database._clear("favorites")
     Database._clear("blocks")
+    Database._clear("tagged_events")
   }
 end
 
