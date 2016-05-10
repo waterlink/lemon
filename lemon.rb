@@ -280,7 +280,7 @@ class User
     Database.update("users", id, [
       email,
       @password,
-      value.to_s,
+      has_notifications_disabled.to_s,
       has_replied_notification_disabled.to_s,
       has_followed_notification_disabled.to_s,
       has_reposted_notification_disabled.to_s,
@@ -296,6 +296,17 @@ class User
 
   def has_replied_notification_disabled=(value)
     @has_replied_notification_disabled = value
+
+    Database.update("users", id, [
+      email,
+      @password,
+      has_notifications_disabled.to_s,
+      has_replied_notification_disabled.to_s,
+      has_followed_notification_disabled.to_s,
+      has_reposted_notification_disabled.to_s,
+      has_favorited_notification_disabled.to_s,
+    ])
+
     if value
       Analytics.tag({name: "disabled_replied_notification"})
     else
@@ -305,6 +316,17 @@ class User
 
   def has_followed_notification_disabled=(value)
     @has_followed_notification_disabled = value
+
+    Database.update("users", id, [
+      email,
+      @password,
+      has_notifications_disabled.to_s,
+      has_replied_notification_disabled.to_s,
+      has_followed_notification_disabled.to_s,
+      has_reposted_notification_disabled.to_s,
+      has_favorited_notification_disabled.to_s,
+    ])
+
     if value
       Analytics.tag({name: "disabled_followed_notification"})
     else
@@ -314,6 +336,17 @@ class User
 
   def has_reposted_notification_disabled=(value)
     @has_reposted_notification_disabled = value
+
+    Database.update("users", id, [
+      email,
+      @password,
+      has_notifications_disabled.to_s,
+      has_replied_notification_disabled.to_s,
+      has_followed_notification_disabled.to_s,
+      has_reposted_notification_disabled.to_s,
+      has_favorited_notification_disabled.to_s,
+    ])
+
     if value
       Analytics.tag({name: "disabled_reposted_notification"})
     else
@@ -323,6 +356,17 @@ class User
 
   def has_favorited_notification_disabled=(value)
     @has_favorited_notification_disabled = value
+
+    Database.update("users", id, [
+      email,
+      @password,
+      has_notifications_disabled.to_s,
+      has_replied_notification_disabled.to_s,
+      has_followed_notification_disabled.to_s,
+      has_reposted_notification_disabled.to_s,
+      has_favorited_notification_disabled.to_s,
+    ])
+
     if value
       Analytics.tag({name: "disabled_favorited_notification"})
     else
@@ -482,6 +526,7 @@ RSpec.configure do |c|
     Database._clear("follows")
     Database._clear("notifications")
     Database._clear("favorites")
+    Database._clear("blocks")
   }
 end
 
