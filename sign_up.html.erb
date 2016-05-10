@@ -1,0 +1,12 @@
+<h1>Sign up</h1>
+
+<% if @validation_error %>
+  <h2><%= @validation_error %></h2>
+<% end %>
+
+<form method="post">
+  <input type="email" name="email" placeholder="Your email" /><br/>
+  <input type="password" name="password", placeholder="Your password" /><br/>
+  <input type="password" name="confirm", placeholder="Confirm your password" /><br/>
+  <input type="submit" value="Sign up" />
+</form>

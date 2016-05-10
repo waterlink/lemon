@@ -1,0 +1,6 @@
+<ul>
+<% @users.each do |user| %>
+  <% @user_list_item = user %>
+  <%= partial "user.html" %>
+<% end %>
+</ul>
