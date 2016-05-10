@@ -19,7 +19,11 @@ class User
 
   def self.find(id)
     found = Database.find("users", id)
-    found && new(
+    found && load(id, found)
+  end
+
+  def self.load(id, found)
+    new(
       __save__: false,
       id: id,
       email: found[0],
@@ -468,7 +472,7 @@ module Database
 
     filename = "#{ENV["HOME"]}/.lemon/database/#{table}.yml"
     table = YAML.load_file(filename) rescue []
-    id = table.count
+    id = table.map { |row| id = row[0] }.max + 1
     table << [id, values]
     File.open(filename, "w") { |f| f.write(table.to_yaml) }
 
