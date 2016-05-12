@@ -16,7 +16,7 @@ class User
           {
             kind: kind,
             follower: User.find(values[1].to_i),
-            user: User.find(values[2].to_i),
+            user: nil,
           }
         elsif kind == "favorited_notification"
           {
