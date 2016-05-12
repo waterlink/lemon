@@ -4,7 +4,7 @@ class User
   def notifications__isolated__
     notifications = Database
       .where("notifications") do |x|
-        # (x[1][0] == "followed_notification" && x[1][2] == id.to_s) ||
+        (x[1][0] == "followed_notification" && x[1][2] == id.to_s) ||
         (x[1][0] == "favorited_notification" && StatusUpdate.find(x[1][2].to_i).owner_id == id) ||
         (x[1][0] == "replied_notification" && StatusUpdate.find(x[1][2].to_i).owner_id == id) ||
         (x[1][0] == "reposted_notification" && StatusUpdate.find(x[1][2].to_i).owner_id == id)
