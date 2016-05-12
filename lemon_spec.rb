@@ -10,7 +10,7 @@ class User
         (x[1][0] == "reposted_notification" && StatusUpdate.find(x[1][2].to_i).owner_id == id)
       end.map do |row|
         id, values = row
-        kind = values[0]
+        kind = values[1]
 
         if kind == "followed_notification"
           {
@@ -61,6 +61,15 @@ describe User do
       notifications = user.notifications__isolated__
 
       expect(notifications.count).to eq(1)
+    end
+
+    it "loads followed notifications with correct kind" do
+      user = User.new(email: "john@example.org", password: "welcome")
+      Database.insert("notifications", ["followed_notification", "986", user.id.to_s])
+
+      notifications = user.notifications__isolated__
+
+      expect(notifications[0][:kind]).to eq("followed_notification")
     end
   end
 end
