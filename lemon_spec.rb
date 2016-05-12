@@ -13,7 +13,7 @@ class User
   def notifications__isolated__
     notifications = Database
       .where("notifications") do |x|
-        (x[1][0] == "followed_notification" && x[1][2] == id.to_s) ||
+        true ||
         (x[1][0] == "favorited_notification" && StatusUpdate.find(x[1][2].to_i).owner_id == id) ||
         (x[1][0] == "replied_notification" && StatusUpdate.find(x[1][2].to_i).owner_id == id) ||
         (x[1][0] == "reposted_notification" && StatusUpdate.find(x[1][2].to_i).owner_id == id)
@@ -118,6 +118,17 @@ describe User do
       notifications = user.notifications__isolated__
 
       expect(analytics.last_tagged_event).to eq({name: "fetch_notifications", count: 1})
+    end
+
+    it "ignores records of invalid kind" do
+      user = User.new(email: "john@example.org", password: "welcome")
+      Database.insert("notifications", [
+        "invalid", "986", user.id.to_s
+      ])
+
+      notifications = user.notifications__isolated__
+
+      expect(notifications.count).to eq(0)
     end
   end
 end
