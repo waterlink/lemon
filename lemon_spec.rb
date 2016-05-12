@@ -49,7 +49,7 @@ class User
         end
       end
 
-    analytics.tag({name: "fetch_notifications", count: notifications.count})
+    # analytics.tag({name: "fetch_notifications", count: notifications.count})
     notifications
   end
 end
