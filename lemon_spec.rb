@@ -47,6 +47,20 @@ end
 
 RSpec.configure do |c|
   c.before do
+    Database._clear("users")
     Database._clear("notifications")
+  end
+end
+
+describe User do
+  describe "#notifications" do
+    it "looks like it loads some notifications from the database" do
+      user = User.new(email: "john@example.org", password: "welcome")
+      Database.insert("notifications", ["followed_notification", "986", user.id.to_s])
+
+      notifications = user.notifications__isolated__
+
+      expect(notifications.count).to eq(1)
+    end
   end
 end

@@ -472,7 +472,7 @@ module Database
 
     filename = "#{ENV["HOME"]}/.lemon/database/#{table}.yml"
     table = YAML.load_file(filename) rescue []
-    id = table.map { |row| id = row[0] }.max + 1
+    id = (table.map { |row| id = row[0] }.max || 0) + 1
     table << [id, values]
     File.open(filename, "w") { |f| f.write(table.to_yaml) }
 
