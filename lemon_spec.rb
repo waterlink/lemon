@@ -10,7 +10,7 @@ class User
         (x[1][0] == "reposted_notification" && StatusUpdate.find(x[1][2].to_i).owner_id == id)
       end.map do |row|
         id, values = row
-        kind = values[1]
+        kind = values[0]
 
         if kind == "followed_notification"
           {
