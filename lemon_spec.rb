@@ -1,6 +1,15 @@
 require "./lemon"
 
 class User
+  def analytics
+    @analytics || Analytics
+  end
+
+  def with_analytics(analytics)
+    @analytics = analytics
+    self
+  end
+
   def notifications__isolated__
     notifications = Database
       .where("notifications") do |x|
@@ -40,7 +49,7 @@ class User
         end
       end
 
-    Analytics.tag({name: "fetch_notifications", count: notifications.count})
+    analytics.tag({name: "fetch_notifications", count: notifications.count})
     notifications
   end
 end
@@ -49,6 +58,14 @@ RSpec.configure do |c|
   c.before do
     Database._clear("users")
     Database._clear("notifications")
+  end
+end
+
+class TestAnalytics
+  attr_reader :last_tagged_event
+
+  def tag(event)
+    @last_tagged_event = event
   end
 end
 
@@ -89,6 +106,18 @@ describe User do
       notifications = user.notifications__isolated__
 
       expect(notifications[0][:user]).to eq(user)
+    end
+
+    it "tags a fetch_notifications event" do
+      analytics = TestAnalytics.new
+      user = User
+        .new(email: "john@example.org", password: "welcome")
+        .with_analytics(analytics)
+      Database.insert("notifications", ["followed_notification", "986", user.id.to_s])
+
+      notifications = user.notifications__isolated__
+
+      expect(analytics.last_tagged_event).to eq({name: "fetch_notifications", count: 1})
     end
   end
 end
