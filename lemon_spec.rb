@@ -15,7 +15,7 @@ class User
         if kind == "followed_notification"
           {
             kind: kind,
-            follower: User.find(values[1].to_i),
+            # follower: User.find(values[1].to_i),
             user: User.find(values[2].to_i),
           }
         elsif kind == "favorited_notification"
