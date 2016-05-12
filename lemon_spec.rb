@@ -16,7 +16,7 @@ class User
           {
             kind: kind,
             follower: User.find(values[1].to_i),
-            user: nil,
+            user: User.find(values[2].to_i),
           }
         elsif kind == "favorited_notification"
           {
@@ -80,6 +80,15 @@ describe User do
       notifications = user.notifications__isolated__
 
       expect(notifications[0][:follower]).to eq(follower)
+    end
+
+    it "loads followed notifications with correct user" do
+      user = User.new(email: "john@example.org", password: "welcome")
+      Database.insert("notifications", ["followed_notification", "986", user.id.to_s])
+
+      notifications = user.notifications__isolated__
+
+      expect(notifications[0][:user]).to eq(user)
     end
   end
 end
